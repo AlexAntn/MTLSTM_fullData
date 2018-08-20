@@ -250,9 +250,9 @@ direction = True            # True - language to actions; False - actions to lan
 alternate = True            # Alternate direction - False will train only one direction
 alpha = 0.5                 # 1 - language loss has more weight, 0 - action loss has more weight
 
-NEPOCH = 1#000000            # number of times to train each batch
-threshold_lang = 0.001      # early stopping language loss threshold
-threshold_motor = 0.5       # early stopping action loss threshold
+NEPOCH = 1000000            # number of times to train each batch
+threshold_lang = 0.005      # early stopping language loss threshold
+threshold_motor = 0.015       # early stopping action loss threshold
 average_loss = 1000.0       # initial value for the average loss (action+language) - arbitrary
 
 loss_list = []              # list that stores the average loss
@@ -353,18 +353,24 @@ train_batch, test_batch, num_batches = create_train_test_batches(x_train, y_trai
 batch_order = np.arange(num_batches)
 ##############################################################################
 
-
+average_action_loss = 1000
+average_language_loss = 1000
 #complicated logic:
 # 1) we train actions and Lang, or;
 # 2) we train only Lang, or;
 # 3) we train only actions.
 
-while (alternate and (lang_loss_list[-1] > threshold_lang or motor_loss_list[-1] > threshold_motor)) or (not alternate and ((direction and lang_loss_list[-1] > threshold_lang) or (not direction and motor_loss_list[-1] > threshold_motor))): 
+#while (alternate and (lang_loss_list[-1] > threshold_lang or motor_loss_list[-1] > threshold_motor)) or (not alternate and ((direction and lang_loss_list[-1] > threshold_lang) or (not direction and motor_loss_list[-1] > threshold_motor))): 
+#    print("Training epoch " + str(epoch_idx))
+
+while (alternate and (average_language_loss > threshold_lang or average_action_loss > threshold_motor)) or (not alternate and ((direction and average_language_loss > threshold_lang) or (not direction and average_action_loss > threshold_motor))): 
     print("Training epoch " + str(epoch_idx))
 
 
     np.random.shuffle(batch_order) 
     batch_loss_list = np.zeros((num_batches), dtype = np.float32)
+    average_action_loss_list = []
+    average_language_loss_list = []
 
     for batch_ in range(num_batches):
         # this check detects if the last batch was the small one, and fixes the state #
@@ -412,14 +418,16 @@ while (alternate and (lang_loss_list[-1] > threshold_lang or motor_loss_list[-1]
                 _total_loss, _train_op, _state_tuple = MTLSTM.sess.run([MTLSTM.total_loss, MTLSTM.train_op, MTLSTM.state_tuple], feed_dict={MTLSTM.x:lang_inputs, MTLSTM.y:y_train_b, MTLSTM.m:motor_inputs, MTLSTM.m_o:motor_outputs, MTLSTM.direction:direction, 'initU_0:0':init_state_IO_l, 'initC_0:0':init_state_IO_l, 'initU_1:0':init_state_fc_l, 'initC_1:0':init_state_fc_l, 'initU_2:0':init_state_sc_l, 'initC_2:0':init_state_sc_l, 'initU_3:0':init_state_ml, 'initC_3:0':init_state_ml, 'initU_4:0':init_state_sc_m, 'initC_4:0':init_state_sc_m, 'initU_5:0':init_state_fc_m, 'initC_5:0':init_state_fc_m, 'initU_6:0':init_state_IO_m, 'initC_6:0':init_state_IO_m})
                 if direction:       # if training language, save language loss
                     loss = _total_loss
-                    print("training sentences: ", loss)
                     lang_loss = loss
                     lang_loss_list.append(lang_loss)
+                    average_language_loss_list.append(lang_loss)
+                    print("training sentences: ", lang_loss)
                 else:               # if training actions, save actions loss
                     loss = _total_loss
-                    print("training motor: ", loss)
-                    motor_loss = loss
+                    #print("training motor: ", loss)
+                    motor_loss = loss/numSeqmod_b
                     motor_loss_list.append(motor_loss)
+                    average_action_loss_list.append(motor_loss)
 
             else:           # if training actions
                 # full language input (as in dataset)
@@ -436,14 +444,16 @@ while (alternate and (lang_loss_list[-1] > threshold_lang or motor_loss_list[-1]
                 _total_loss, _train_op, _state_tuple = MTLSTM.sess.run([MTLSTM.total_loss, MTLSTM.train_op, MTLSTM.state_tuple], feed_dict={MTLSTM.x:lang_inputs, MTLSTM.y:y_train_b, MTLSTM.m:motor_inputs, MTLSTM.m_o:motor_outputs, MTLSTM.direction:direction, 'initU_0:0':init_state_IO_l, 'initC_0:0':init_state_IO_l, 'initU_1:0':init_state_fc_l, 'initC_1:0':init_state_fc_l, 'initU_2:0':init_state_sc_l, 'initC_2:0':init_state_sc_l, 'initU_3:0':init_state_ml, 'initC_3:0':init_state_ml, 'initU_4:0':init_state_sc_m, 'initC_4:0':init_state_sc_m, 'initU_5:0':init_state_fc_m, 'initC_5:0':init_state_fc_m, 'initU_6:0':init_state_IO_m, 'initC_6:0':init_state_IO_m})
                 if direction:       # if training language, save language loss
                     loss = _total_loss
-                    print("training sentences: ", loss)
+                    #print("training sentences: ", loss)
                     lang_loss = loss
                     lang_loss_list.append(lang_loss)
+                    average_language_loss_list.append(lang_loss)
                 else:               # if training actions, save actions loss
                     loss = _total_loss
-                    print("training motor: ", loss)
-                    motor_loss = loss
+                    motor_loss = loss/numSeqmod_b
                     motor_loss_list.append(motor_loss)
+                    average_action_loss_list.append(motor_loss)
+                    print("training motor: ", motor_loss)
 
             # Below is the implementation that allows the network to focus on
             # a specific training direction, if the other has already crossed
@@ -468,17 +478,24 @@ while (alternate and (lang_loss_list[-1] > threshold_lang or motor_loss_list[-1]
             else:
                 break
         batch_loss_list[batch_] = alpha*lang_loss + (1-alpha)*motor_loss
-
+    average_action_loss = np.sum(average_action_loss_list)/num_batches
+    print("Average action error for epoch ", epoch_idx, ": ", average_action_loss)
+    average_language_loss = np.sum(average_language_loss_list)/num_batches
+    print("Average language error for epoch ", epoch_idx, ": ", average_language_loss)
+    
     average_loss = np.sum(batch_loss_list)/num_batches   # calculate average loss
     loss_list.append(average_loss)                          # save average loss
     print("Current best loss: ",best_loss)
     print("#################################")
-    print("epoch "+str(epoch_idx) +", loss: "+str(loss))
+    print("epoch "+str(epoch_idx) +", loss: "+str(average_loss))
     if average_loss <= best_loss:           # if average loss lower than best, save model
-        model_path = my_path + "/mtrnn_"+str(epoch_idx) + "_loss_" + str(average_loss)
-        save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
+        #model_path = my_path + "/mtrnn_"+str(epoch_idx) + "_loss_" + str(average_loss)
+        #save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
         best_loss = average_loss
-        flag_save =True
+        #flag_save =True
+    model_path = my_path + "/mtrnn_"+str(epoch_idx) + "_loss_" + str(average_loss)
+    save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
+    flag_save =True
 
     epoch_idx += 1
     if epoch_idx > NEPOCH:
