@@ -214,8 +214,9 @@ def loadTrainingData(LangInputNeurons, MotorInputNeurons, Lang_stepEachSeq, Moto
 ###########################################
 
 
-def plot(loss_list, fig, ax):
-    ax.semilogy(loss_list, 'b')
+def plot(language_loss, action_loss, fig, ax):
+    ax.semilogy(language_loss, 'b')
+    ax.semilogy(action_loss, 'r')
     fig.canvas.flush_events()
 
 ###########################################
@@ -252,14 +253,14 @@ alpha = 0.5                 # 1 - language loss has more weight, 0 - action loss
 
 NEPOCH = 1000000            # number of times to train each batch
 threshold_lang = 0.005      # early stopping language loss threshold
-threshold_motor = 0.015       # early stopping action loss threshold
-average_loss = 1000.0       # initial value for the average loss (action+language) - arbitrary
+threshold_motor = 0.1       # early stopping action loss threshold
+average_loss = 1.0          # initial value for the average loss (action+language) - arbitrary
 
 loss_list = []              # list that stores the average loss
-lang_loss_list = [2]        # list that stores the language loss
-lang_loss = 2               # Save model if language loss below this value
-motor_loss_list = [2]       # list that stores the action loss
-motor_loss = 2              # Save model if action loss below this value
+lang_loss_list = [0.5]      # list that stores the language loss
+lang_loss = 0.5             # Save model if language loss below this value
+motor_loss_list = [1]       # list that stores the action loss
+motor_loss = 1              # Save model if action loss below this value
 
 ## formula for calculating the overall best loss of the model ##
 best_loss = alpha * lang_loss + (1-alpha) * motor_loss
@@ -338,10 +339,13 @@ MTLSTM.sess.run(tf.global_variables_initializer())
 
 flag_save = False           # flag indicating if the network has been saved or not (if it reaches the limit of epochs without having saved yet)
 
+epoch_idx = 0       # initialize epochs
+
 if not START_FROM_SCRATCH:
     MTLSTM.saver.restore(MTLSTM.sess, load_path)
+    temp_list = load_path.split("_")
+    epoch_idx = int(temp_list[1])       # initialize epochs
 
-epoch_idx = 0       # initialize epochs
 counter_lang = 0    # initialize counter for number of language training epochs
 counter_motor = 0   # initialize counter for number of action training epochs
 
@@ -366,7 +370,7 @@ average_language_loss = 1000
 while (alternate and (average_language_loss > threshold_lang or average_action_loss > threshold_motor)) or (not alternate and ((direction and average_language_loss > threshold_lang) or (not direction and average_action_loss > threshold_motor))): 
     print("Training epoch " + str(epoch_idx))
 
-
+    updated = False
     np.random.shuffle(batch_order) 
     batch_loss_list = np.zeros((num_batches), dtype = np.float32)
     average_action_loss_list = []
@@ -419,14 +423,14 @@ while (alternate and (average_language_loss > threshold_lang or average_action_l
                 if direction:       # if training language, save language loss
                     loss = _total_loss
                     lang_loss = loss
-                    lang_loss_list.append(lang_loss)
+                    #lang_loss_list.append(lang_loss)
                     average_language_loss_list.append(lang_loss)
                     print("training sentences: ", lang_loss)
                 else:               # if training actions, save actions loss
                     loss = _total_loss
                     #print("training motor: ", loss)
-                    motor_loss = loss/numSeqmod_b
-                    motor_loss_list.append(motor_loss)
+                    motor_loss = loss#/numSeqmod_b
+                    #motor_loss_list.append(motor_loss)
                     average_action_loss_list.append(motor_loss)
 
             else:           # if training actions
@@ -446,12 +450,12 @@ while (alternate and (average_language_loss > threshold_lang or average_action_l
                     loss = _total_loss
                     #print("training sentences: ", loss)
                     lang_loss = loss
-                    lang_loss_list.append(lang_loss)
+                    #lang_loss_list.append(lang_loss)
                     average_language_loss_list.append(lang_loss)
                 else:               # if training actions, save actions loss
                     loss = _total_loss
-                    motor_loss = loss/numSeqmod_b
-                    motor_loss_list.append(motor_loss)
+                    motor_loss = loss#/numSeqmod_b
+                    #motor_loss_list.append(motor_loss)
                     average_action_loss_list.append(motor_loss)
                     print("training motor: ", motor_loss)
 
@@ -479,8 +483,11 @@ while (alternate and (average_language_loss > threshold_lang or average_action_l
                 break
         batch_loss_list[batch_] = alpha*lang_loss + (1-alpha)*motor_loss
     average_action_loss = np.sum(average_action_loss_list)/num_batches
+    motor_loss_list.append(average_action_loss)
     print("Average action error for epoch ", epoch_idx, ": ", average_action_loss)
+    
     average_language_loss = np.sum(average_language_loss_list)/num_batches
+    lang_loss_list.append(average_language_loss)
     print("Average language error for epoch ", epoch_idx, ": ", average_language_loss)
     
     average_loss = np.sum(batch_loss_list)/num_batches   # calculate average loss
@@ -492,14 +499,16 @@ while (alternate and (average_language_loss > threshold_lang or average_action_l
         #model_path = my_path + "/mtrnn_"+str(epoch_idx) + "_loss_" + str(average_loss)
         #save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
         best_loss = average_loss
+        updated = True
         #flag_save =True
-    model_path = my_path + "/mtrnn_"+str(epoch_idx) + "_loss_" + str(average_loss)
-    save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
-    flag_save =True
 
     epoch_idx += 1
     if epoch_idx > NEPOCH:
         break
+    if epoch_idx%10 == 0 or updated:
+        model_path = my_path + "/mtrnn_"+str(epoch_idx) + "_loss_" + str(average_loss)
+        save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
+        flag_save =True
 
 print("the network trained language ", counter_lang, " times and motor actions ", counter_motor, " times.")
 
@@ -509,7 +518,7 @@ plt.ion()
 fig = plt.figure()
 ax = plt.subplot(1,1,1)
 fig.show()
-plot(loss_list, fig, ax)
+plot(motor_loss_list, lang_loss_list, fig, ax)
 ############################################################################################
 
 #####################  If the network was never saved during the whole training ############

@@ -242,7 +242,7 @@ class MTLSTMModel(object):
         config.gpu_options.per_process_gpu_memory_fraction = 0.3
         config.operation_timeout_in_ms = 50000
 
-        self.saver = tf.train.Saver()
+        self.saver = tf.train.Saver(max_to_keep = 10000)
         self.sess = tf.Session(config = config)
 
 ################################################################################
