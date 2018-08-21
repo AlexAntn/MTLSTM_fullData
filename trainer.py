@@ -241,7 +241,7 @@ def create_batch(x_train, y_train, m_train, m_gener, m_output, batch_size):
 my_path= os.getcwd()
 
 ########################################## Control Variables ################################
-START_FROM_SCRATCH = False  # start model from scratch, or from pre-trained
+START_FROM_SCRATCH = True  # start model from scratch, or from pre-trained
 mtlstm_file = "\mtrnn_20_loss_102.3457782451923"
 load_path = my_path + mtlstm_file     # path to pre-trained file
 # Example Path: load_path = my_path + "/mtrnn_387111_loss_0.11538351478520781"
