@@ -10,6 +10,7 @@ import operator
 import io
 import array
 import datetime
+import pickle
 
 import os
 import sys
@@ -240,8 +241,9 @@ def create_batch(x_train, y_train, m_train, m_gener, m_output, batch_size):
 my_path= os.getcwd()
 
 ########################################## Control Variables ################################
-START_FROM_SCRATCH = True  # start model from scratch, or from pre-trained
-load_path = my_path + ""    # path to pre-trained file
+START_FROM_SCRATCH = False  # start model from scratch, or from pre-trained
+mtlstm_file = "\mtrnn_20_loss_102.3457782451923"
+load_path = my_path + mtlstm_file     # path to pre-trained file
 # Example Path: load_path = my_path + "/mtrnn_387111_loss_0.11538351478520781"
 
 USING_BATCH = True          # using batches or full dataset
@@ -340,14 +342,26 @@ MTLSTM.sess.run(tf.global_variables_initializer())
 flag_save = False           # flag indicating if the network has been saved or not (if it reaches the limit of epochs without having saved yet)
 
 epoch_idx = 0       # initialize epochs
+counter_lang = 0    # initialize counter for number of language training epochs
+counter_motor = 0   # initialize counter for number of action training epochs
 
 if not START_FROM_SCRATCH:
     MTLSTM.saver.restore(MTLSTM.sess, load_path)
-    temp_list = load_path.split("_")
-    epoch_idx = int(temp_list[1])       # initialize epochs
+    temp_list = mtlstm_file.split("_")
+    epoch_idx = int(temp_list[1]) +1        # initialize epochs
+    with open('lang_loss', 'rb') as fp:     # get the loss graph from previous session
+        dump_list = pickle.load(fp)
+        lang_loss_list = dump_list[:-1]
+        counter_lang = dump_list[-1]
+        print("number of epochs for language training: ", counter_lang)
+        print("last recorded language loss: ", lang_loss_list[-1])
+    with open('motor_loss', 'rb') as fp:    # get the loss graph from previous session
+        dump_list = pickle.load(fp)
+        motor_loss_list = dump_list[:-1]
+        counter_motor = dump_list[-1]
+        print("number of epochs for motor training: ", counter_motor)
+        print("last recorded motor loss: ", motor_loss_list[-1])
 
-counter_lang = 0    # initialize counter for number of language training epochs
-counter_motor = 0   # initialize counter for number of action training epochs
 
 ########### New functions to create and manipulate the batches ###############
 test_size = 1 # number of batches on the test data
@@ -506,9 +520,16 @@ while (alternate and (average_language_loss > threshold_lang or average_action_l
     if epoch_idx > NEPOCH:
         break
     if epoch_idx%10 == 0 or updated:
+        print("saving model......")
         model_path = my_path + "/mtrnn_"+str(epoch_idx) + "_loss_" + str(average_loss)
         save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
         flag_save =True
+        with open('lang_loss', 'wb') as fp:
+            dump_list = lang_loss_list + [counter_lang]
+            pickle.dump(dump_list, fp)
+        with open('motor_loss', 'wb') as fp:
+            dump_list = motor_loss_list + [counter_motor]
+            pickle.dump(dump_list, fp)
 
 print("the network trained language ", counter_lang, " times and motor actions ", counter_motor, " times.")
 
