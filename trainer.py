@@ -253,7 +253,7 @@ direction = True            # True - language to actions; False - actions to lan
 alternate = True            # Alternate direction - False will train only one direction
 alpha = 0.5                 # 1 - language loss has more weight, 0 - action loss has more weight
 
-NEPOCH = 1000000            # number of times to train each batch
+NEPOCH = 80000            # number of times to train each batch
 threshold_lang = 0.005      # early stopping language loss threshold
 threshold_motor = 0.1       # early stopping action loss threshold
 average_loss = 1.0          # initial value for the average loss (action+language) - arbitrary
@@ -337,8 +337,6 @@ init_state_sc_m = np.zeros([numSeqmod_b, motor_dim2], dtype = np.float32)
 
 ############################### training iterations #########################################
 
-MTLSTM.sess.run(tf.global_variables_initializer())
-
 flag_save = False           # flag indicating if the network has been saved or not (if it reaches the limit of epochs without having saved yet)
 
 epoch_idx = 0       # initialize epochs
@@ -361,6 +359,8 @@ if not START_FROM_SCRATCH:
         counter_motor = dump_list[-1]
         print("number of epochs for motor training: ", counter_motor)
         print("last recorded motor loss: ", motor_loss_list[-1])
+else:
+    MTLSTM.sess.run(tf.global_variables_initializer())
 
 
 ########### New functions to create and manipulate the batches ###############
@@ -643,16 +643,6 @@ for truth in range(2):
     # back to alternating training
     if alternate:
         direction = not direction
-        if motor_loss_list[-1] < threshold_motor:
-            direction = True
-            if epoch_idx%10 == 0:
-                direction = not direction
-            break
-        elif lang_loss_list[-1] < threshold_lang:
-            direction = False
-            if epoch_idx%10 == 0:
-                direction = not direction
-            break
     else:
         break
 batch_loss_list = alpha*lang_loss + (1-alpha)*motor_loss
