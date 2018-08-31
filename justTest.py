@@ -283,14 +283,114 @@ error_mat = np.zeros((numSeq, 100, motor_input))    # matrix of error per neuron
 output_vec = np.zeros([numSeq, stepEachSeq, motor_input], dtype = np.float32)   # matrix with all motor outputs
 how_many_times = 0      # marker for the last verb that was processed and plotted. Used when printing the graphs
 
+# total euclid distance
+euclid_dist_error = np.zeros([numSeq], dtype = np.float32)
+
+# euclid distance on steps only
+#euclid_dist_error = np.zeros([numSeq, motor_input], dtype = np.float32)
+
+# euclid distance on outputs only
+#euclid_dist_error = np.zeros([numSeq, stepEachSeq], dtype = np.float32)
+
 ################################################################################
+
+test_model = 0
+seq_file = "test_seq_"+ str(best_model) + ".txt"
+
+with open(seq_file, 'r') as the_file:
+    sequence_str = seq_file.read()
+    sequence_str = sequence_str.replace('[', '').replace(']', '').split(", ")
+seq = []
+for i in range(len(sequence_str)):
+    seq += [int(sequence_str[i])]
 
 MTRNN.forward_step_test()
 tf.get_default_graph().finalize()
 
+old_verb = ""
+graph_counter = 0
+old_t = 0
 for i in range(0, numSeq, 1):
 
+    if i in seq:
+        continue
+
     print("sentence: ", sentence_list[i])
+    phrase = sentence_list[i]
+    verb = phrase.split(" the ")[0]
+
+    if verb != old_verb and test_false and i > 0:
+
+        #new_t = i+1
+        new_t = i
+
+        plt.figure(1)
+        #plt.axhline(y=0.1, ls='-', color='black', linewidth = 3.0)
+
+        #color_2 = 1
+        #for h in range(how_many_times, new_t, 1):
+        #    if np.amax(error_mat[h,:,:]) == np.amax(error_mat[how_many_times:new_t,:,:]):
+        #        index_max = h
+        #        for t in range(0, motor_input, 1):
+        #            color = t/motor_input
+        #            color_inv = 1 - color
+        #            plt.plot(error_mat[h,:,t], color=(color_inv, color, 0))
+        #for h in range(how_many_times, new_t, 1):
+        #    if np.amax(average_action_error[h,:]) == np.amax(average_action_error[how_many_times:new_t,:]):
+        #        print(np.amax(average_action_error[h,:]))
+        #        color = 0
+        #        color_inv = 0
+         #       plt.plot(average_action_error[h,:], color=(color_inv, color, color_2))
+
+        plt.plot(euclid_dist_error[old_t: new_t], color ='r')
+        
+        axes = plt.gca()
+        #axes.set_ylim([0.0, 0.15])
+        plt.title(old_verb, fontsize = 24)
+
+
+        # this is to remove ticks from some graphs - easier for paper #
+        if graph_counter != 0 and graph_counter != 3:
+            plt.tick_params(
+                axis='y',           # changes apply to the x-axis
+                which='both',       # both major and minor ticks are affected
+                left='off',         # ticks along the bottom edge are off
+                right='off',        # ticks along the top edge are off
+                labelleft='off')    # labels along the bottom edge are off
+        ###############################################################
+
+        #plt.savefig(my_path+'action' + str(index_max) + '_errorGraph.png', dpi=125)
+        #plt.clf()
+        #plt.grid()
+
+        # this loop checks the trajectory with max error, and plots it separately #
+        #for h in range(how_many_times, new_t, 1):
+        #    for t in range(0, motor_input, 1):
+       #         if np.amax(error_mat[h,:,t]) == np.amax(error_mat[how_many_times:new_t,:,:]):
+        #            act = sentence_list[h]
+        #            plt.figure(2)
+        #            plt.clf()
+        #            fig, ax1 = plt.subplots()
+        #            fig.suptitle(act, fontsize = 24)
+        #            ax2 = ax1.twinx()
+        #            ax1.set_ylim([0.0, 0.3])
+        #            color = t/motor_input
+        #            color_inv = 1 - color
+#
+        #            ax1.plot(error_mat[h,:,t], color=(color_inv, color, 0.0))
+        #            ax1.set_ylabel("error", color='black')
+##
+        #            ax2.plot(output_vec[h,30:,t], 'r')
+        #            ax2.plot(m_output[h, 30:, t], 'b')
+        #            ax2.set_ylabel("neuron activation", color='black')
+        #            plt.grid()
+#
+        #            plt.savefig(my_path+'action' + str(h) + '_trajectory.png', dpi=125)      
+        #how_many_times = new_t  # mark the last verb updated (corresponding to sequence number new_t). #
+        graph_counter += 1
+        old_t = new_t
+
+    old_verb = verb
 
     if test_true:
         new_lang_out = np.asarray(np.zeros((1, stepEachSeq)),dtype=np.int32)
@@ -436,6 +536,28 @@ for i in range(0, numSeq, 1):
                 temp_error += np.abs(m_output[i, t, k] - output_list[t][0][0][k])
             total_error += temp_error
 
+        # euclid distance calculation (total)
+        temp_error = 0.0
+        for t in range(stepEachSeq):
+            for k in range(motor_input):
+                temp_error += np.square(m_output[i, t, k] - output_list[t][0][0][k])
+        euclid_dist_error[i] = np.sqrt(temp_error)
+
+        # euclid distance calculation (per motor encoder)
+        #temp_error = 0.0
+        #for k in range(motor_input):
+        #    for t in range(stepEachSeq):
+        #        temp_error += np.square(m_output[i, t, k] - output_list[t][0][0][k])
+        #    euclid_dist_error[i, k] = np.sqrt(temp_error)
+
+        # euclid distance calculation (per step)
+        #temp_error = 0.0
+        #for t in range(stepEachSeq):
+        #    for k in range(motor_input):
+        #        temp_error += np.square(m_output[i, t, k] - output_list[t][0][0][k])
+        #    euclid_dist_error[i, t] = np.sqrt(temp_error)
+
+
     # to see individual trajectory plots, uncomment below #
         #for t in range(0, motor_input, 45):
         #    plt.plot(output_vec[i, 30:,t], 'r')
@@ -444,7 +566,7 @@ for i in range(0, numSeq, 1):
 
 
         # these values mark the end of a certain verb, where we will average the error across the different trajectories for that verb #
-        if i == 53 or i == 107 or i == 161 or i == 215 or i == 269 or i == 323 or i == 359 or i == 395 or i == 431:
+        '''if i == 53 or i == 107 or i == 161 or i == 215 or i == 269 or i == 323 or i == 359 or i == 395 or i == 431:
 
             new_t = i+1
 
@@ -513,7 +635,7 @@ for i in range(0, numSeq, 1):
                         plt.grid()
 
                         plt.savefig(my_path+'action' + str(h) + '_trajectory.png', dpi=125)      
-            how_many_times = new_t  # mark the last verb updated (corresponding to sequence number new_t). #
+            how_many_times = new_t  # mark the last verb updated (corresponding to sequence number new_t). #'''
 
 MTRNN.sess.close()
 

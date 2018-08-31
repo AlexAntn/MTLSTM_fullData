@@ -18,7 +18,8 @@ import sys
 import itertools
 
 class batch_struct():
-    def __init__(self, x_train, y_train, m_train, m_gener, m_output):
+    def __init__(self, x_train, y_train, m_train, m_gener, m_output, seq_num):
+        self.seq_num = seq_num
         self.x_train = x_train
         self.y_train = y_train
         self.m_train = m_train
@@ -42,15 +43,15 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
     m_train_b = np.zeros((batch_size, m_train.shape[1], m_train.shape[2]), dtype = np.float32)
     m_gener_b = np.zeros((batch_size, m_gener.shape[1], m_gener.shape[2]), dtype = np.float32)
     m_output_b = np.zeros((batch_size, m_output.shape[1], m_output.shape[2]), dtype = np.float32)
-    
+    seq = []
     for i in range(batch_size):
-        seq = test_seqs[i]
-        x_train_b[i,:,:] = x_train[seq, :, :]
-        y_train_b[i,:] = y_train[seq, :]
-        m_train_b[i,:,:] = m_train[seq, :, :]
-        m_gener_b[i,:,:] = m_gener[seq, :, :]
-        m_output_b[i,:,:] = m_output[seq, :, :]
-    test_batch += [batch_struct(x_train_b, y_train_b, m_train_b, m_gener_b, m_output_b)]
+        seq += [test_seqs[i]]
+        x_train_b[i,:,:] = x_train[seq[-1], :, :]
+        y_train_b[i,:] = y_train[seq[-1], :]
+        m_train_b[i,:,:] = m_train[seq[-1], :, :]
+        m_gener_b[i,:,:] = m_gener[seq[-1], :, :]
+        m_output_b[i,:,:] = m_output[seq[-1], :, :]
+    test_batch += [batch_struct(x_train_b, y_train_b, m_train_b, m_gener_b, m_output_b, seq)]
     ####################################################################
 
     ######################## and now the training set ##################
@@ -62,17 +63,19 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
     
     t = 0
     num_batches = 0
+    seq = []
     for i in range(x_train.shape[0]-batch_size):
         if i%batch_size == 0 and i != 0:
-            train_batch += [batch_struct(x_train_b, y_train_b, m_train_b, m_gener_b, m_output_b)]
+            train_batch += [batch_struct(x_train_b, y_train_b, m_train_b, m_gener_b, m_output_b, seq)]
             t = 0
+            seq = []
             num_batches += 1
-        seq = train_seqs[i]
-        x_train_b[t,:,:] = x_train[seq, :, :]
-        y_train_b[t,:] = y_train[seq, :]
-        m_train_b[t,:,:] = m_train[seq, :, :]
-        m_gener_b[t,:,:] = m_gener[seq, :, :]
-        m_output_b[t,:,:] = m_output[seq, :, :]
+        seq += [train_seqs[i]]
+        x_train_b[t,:,:] = x_train[seq[-1], :, :]
+        y_train_b[t,:] = y_train[seq[-1], :]
+        m_train_b[t,:,:] = m_train[seq[-1], :, :]
+        m_gener_b[t,:,:] = m_gener[seq[-1], :, :]
+        m_output_b[t,:,:] = m_output[seq[-1], :, :]
 
         t += 1
     ############### And now to process the last batch, which might be smaller ##########
@@ -87,7 +90,7 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
         m_train_b_t[:,:,:] = m_train_b[0:t, :, :]
         m_gener_b_t[:,:,:] = m_gener_b[0:t, :, :]
         m_output_b_t[:,:,:] = m_output_b[0:t, :, :]
-        train_batch += [batch_struct(x_train_b_t, y_train_b_t, m_train_b_t, m_gener_b_t, m_output_b_t)]
+        train_batch += [batch_struct(x_train_b_t, y_train_b_t, m_train_b_t, m_gener_b_t, m_output_b_t, seq)]
         num_batches += 1
     
     return train_batch, test_batch, num_batches
@@ -522,7 +525,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
         epoch_idx += 1
         if epoch_idx > NEPOCH:
             break
-        if updated: #epoch_idx%100 == 0 or 
+        if epoch_idx%100 == 0 or updated: 
             print("saving model......")
             model_path = my_path + "/mtlstm_model_"+str(best_model) + "_epoch_"+str(epoch_idx) + "_loss_" + str(average_loss)
             save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
@@ -536,6 +539,11 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
 
     print("the network trained language ", counter_lang, " times and motor actions ", counter_motor, " times.")
 
+    Sequences = test_batch[0].seq_num
+
+    seq_file = "test_seq_" + str(best_model) + ".txt"
+    with open(seq_file, 'a') as the_file:
+        the_file.write(str(Sequences))
 
     ##################################### Print error graph ####################################
     #plt.ion()
@@ -582,6 +590,9 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
     m_train_b = test_batch[curr_batch].m_train
     m_gener_b = test_batch[curr_batch].m_gener
     m_output_b = test_batch[curr_batch].m_output
+
+    #print("Sequences: ",Sequences)
+
     motor_inputs = np.zeros([m_train_b.shape[0], m_train_b.shape[1], m_train_b.shape[2]], dtype = np.float32)
 
     numSeqmod_b = m_train_b.shape[0]
