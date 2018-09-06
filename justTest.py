@@ -209,7 +209,7 @@ stepEachSeq = Lang_stepEachSeq + Motor_stepEachSeq  # total number of steps in 1
 LEARNING_RATE = 5 * 1e-3    # Learning Rate of the network
 
 ################################### Network Initialization ###################################
-MTRNN = CTRNNModel([input_layer, lang_dim1, lang_dim2, meaning_dim, motor_dim2, motor_dim1, motor_layer], [2, 5, 60, 100, 60, 5, 2], stepEachSeq, lang_input, motor_input, LEARNING_RATE)
+MTRNN = MTLSTMModel([input_layer, lang_dim1, lang_dim2, meaning_dim, motor_dim2, motor_dim1, motor_layer], [2, 5, 60, 100, 60, 5, 2], stepEachSeq, lang_input, motor_input, LEARNING_RATE)
 
 
 #################################### acquire data ##########################################
@@ -247,11 +247,11 @@ else:
 print("data loaded")
 
 test_false = True       # True to test action generation
-test_true = False       # True to test sentence generation
+test_true = True       # True to test sentence generation
 PRINT_TABLE = False     # True to print language output matrix
 
 ############################### 
-save_path = my_path + "/mtrnn_387111_loss_0.11538351478520781"
+save_path = my_path + "/mtlstm_model_0_epoch_23916_loss_0.12211811542510986"
 ########################################## TEST ############################################
 
 MTRNN.saver.restore(MTRNN.sess, save_path)
@@ -271,7 +271,7 @@ init_state_sc_m = np.zeros([1, motor_dim2], dtype = np.float32)
 
 
 ####################### For printing action error graphs ######################
-verb = 0
+verb_count = 0
 #plt.grid()
 fullOutputList = []
 fullErrorList = []
@@ -294,7 +294,7 @@ euclid_dist_error = np.zeros([numSeq], dtype = np.float32)
 
 ################################################################################
 
-test_model = 0
+best_model = 0
 seq_file = "test_seq_"+ str(best_model) + ".txt"
 
 with open(seq_file, 'r') as the_file:
@@ -357,6 +357,7 @@ for i in range(0, numSeq, 1):
                 left='off',         # ticks along the bottom edge are off
                 right='off',        # ticks along the top edge are off
                 labelleft='off')    # labels along the bottom edge are off
+        plt.show()
         ###############################################################
 
         #plt.savefig(my_path+'action' + str(index_max) + '_errorGraph.png', dpi=125)
@@ -485,7 +486,7 @@ for i in range(0, numSeq, 1):
         new_motor_out = np.asarray(np.zeros((1, stepEachSeq, motor_input)), dtype=np.float32)
 
         direction = False
-        new_motor_in[0, 0, :] = m_gener[i, 0, :]
+        new_motor_in[0, :, :] = m_gener[i, :, :]
         new_lang_in[0,:,:] = x_train[i,:,:]
 
         output_list = []
@@ -527,7 +528,7 @@ for i in range(0, numSeq, 1):
         average_action_error[i,:] = average_error[:]
         fullOutputList += [output_vec]
 
-        verb += 1
+        verb_count += 1
 
         total_error = 0.0
         for t in range(stepEachSeq):
@@ -559,10 +560,10 @@ for i in range(0, numSeq, 1):
 
 
     # to see individual trajectory plots, uncomment below #
-        #for t in range(0, motor_input, 45):
-        #    plt.plot(output_vec[i, 30:,t], 'r')
-        #    plt.plot(m_output[i, 30:, t], 'b')
-        #    plt.show()
+        for t in range(10, motor_input, 15):
+            plt.plot(output_vec[i, 30:,t], 'r')
+            plt.plot(m_output[i, 30:, t], 'b')
+            plt.show()
 
 
         # these values mark the end of a certain verb, where we will average the error across the different trajectories for that verb #

@@ -384,6 +384,13 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
     # 2) we train only Lang, or;
     # 3) we train only actions.
 
+    Sequences = test_batch[0].seq_num
+
+    seq_file = "test_seq_" + str(best_model) + ".txt"
+    with open(seq_file, 'a') as the_file:
+        the_file.write(str(Sequences))
+
+
     #while (alternate and (lang_loss_list[-1] > threshold_lang or motor_loss_list[-1] > threshold_motor)) or (not alternate and ((direction and lang_loss_list[-1] > threshold_lang) or (not direction and motor_loss_list[-1] > threshold_motor))): 
     #    print("Training epoch " + str(epoch_idx))
 
@@ -412,7 +419,6 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
             m_train_b = train_batch[curr_batch].m_train
             m_gener_b = train_batch[curr_batch].m_gener
             m_output_b = train_batch[curr_batch].m_output
-            motor_inputs = np.zeros([m_train_b.shape[0], m_train_b.shape[1], m_train_b.shape[2]], dtype = np.float32)
 
             numSeqmod_b = m_train_b.shape[0]
             # this check detects if the current batch is the smaller one, and fixes the state #
@@ -427,6 +433,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
 
             print("Current batch: ", batch_)
             for truth in range(2):
+                motor_inputs = np.zeros([m_train_b.shape[0], m_train_b.shape[1], m_train_b.shape[2]], dtype = np.float32)
                 if direction:   # if training language
                     # There is no language input (all zeros)
                     lang_inputs = np.zeros([numSeqmod_b, stepEachSeq, lang_input], dtype = np.float32)
@@ -539,11 +546,6 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
 
     print("the network trained language ", counter_lang, " times and motor actions ", counter_motor, " times.")
 
-    Sequences = test_batch[0].seq_num
-
-    seq_file = "test_seq_" + str(best_model) + ".txt"
-    with open(seq_file, 'a') as the_file:
-        the_file.write(str(Sequences))
 
     ##################################### Print error graph ####################################
     #plt.ion()
