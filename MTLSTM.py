@@ -109,141 +109,144 @@ class MultiLayerHandler():
 
 class MTLSTMModel(object):
     def __init__(self, num_units, tau, num_steps, lang_dim, motor_dim, learning_rate=1e-4):
+        with tf.device('/device:GPU:0'):
+            self.num_units = num_units  # vector with number of cells per layer
+            self.num_layers = len(self.num_units)   # number of layers
+            self.tau = tau              # vector of timescales per layer
 
-        self.num_units = num_units  # vector with number of cells per layer
-        self.num_layers = len(self.num_units)   # number of layers
-        self.tau = tau              # vector of timescales per layer
+            self.lang_dim = lang_dim    # Input/Output dimention for language
+            self.motor_dim = motor_dim  # Input/Output dimention for actions
 
-        self.lang_dim = lang_dim    # Input/Output dimention for language
-        self.motor_dim = motor_dim  # Input/Output dimention for actions
-
-        self.activation = lambda x: 1.7159 * tf.tanh(2/3 * x)
-        # activation function to use on the cells (default)
-
-
-    # Inputs #
-        # language matrix #
-        # num_sequences x num_timesteps x num_elements_language #
-        self.x = tf.placeholder(tf.float32, shape=[None, num_steps, lang_dim], name='inputPlaceholder')
-        self.x_reshaped = tf.reshape(tf.transpose(self.x, [1,0,2]), [-1])
-
-        # action matrix #
-        # num_sequences x num_timesteps x num_elements_actions #
-        self.m = tf.placeholder(tf.float32, shape = [None, num_steps, motor_dim], name = 'sentencePlaceholder')
-
-        # language target #
-        # num_sequences x num_timesteps. Each timestep has an integer corresponding to the letter #
-        self.y = tf.placeholder(tf.int32, shape=[None, num_steps], name='outputPlaceholder')
-        pre_y_reshaped = self.y[:,100:130]      # only the last 30 steps count, corresponding to the language output time #
-        self.y_reshaped = tf.reshape(tf.transpose(pre_y_reshaped, [1,0]), [-1])
-
-        # actions target #
-        # num_sequences x num_timesteps x num_elements_actions.#
-        self.m_o = tf.placeholder(tf.float32, shape=[None, num_steps, motor_dim], name='outputPlaceholder')
-        pre_m_o_reshaped = self.m_o[:,30:130,:] # only the last 100 steps count, corresponding to the action output time #
-        self.m_o_reshaped = tf.reshape(tf.transpose(pre_m_o_reshaped, [1, 0, 2]), [-1, motor_dim])
-
-        # direction of information flow (True - sentences, False - actions)
-        self.direction = tf.placeholder(tf.bool, shape=())
+            self.activation = lambda x: 1.7159 * tf.tanh(2/3 * x)
+            # activation function to use on the cells (default)
 
 
-        # initialize states/inputs #
-        init_input_lang = tf.placeholder(tf.float32, shape=[None, self.num_units[0]], name='initInputLang')
-        init_input_motor = tf.placeholder(tf.float32, shape=[None, self.num_units[6]], name = 'initInputMotor')
-        init_input = [init_input_motor, init_input_lang]
-        init_state = []
-        for i, num_unit in enumerate(self.num_units):
-            init_c = tf.placeholder(tf.float32, shape=[None, num_unit], name='initC_' + str(i))
-            init_u = tf.placeholder(tf.float32, shape=[None, num_unit], name='initU_' + str(i))
-            init_state += [(init_c, init_u)]
-        init_state = tuple(init_state)
-        self.init_tuple = (init_input, init_state)
+        # Inputs #
+            # language matrix #
+            # num_sequences x num_timesteps x num_elements_language #
+            self.x = tf.placeholder(tf.float32, shape=[None, num_steps, lang_dim], name='inputPlaceholder')
+            self.x_reshaped = tf.reshape(tf.transpose(self.x, [1,0,2]), [-1])
+
+            # action matrix #
+            # num_sequences x num_timesteps x num_elements_actions #
+            self.m = tf.placeholder(tf.float32, shape = [None, num_steps, motor_dim], name = 'sentencePlaceholder')
+
+            # language target #
+            # num_sequences x num_timesteps. Each timestep has an integer corresponding to the letter #
+            self.y = tf.placeholder(tf.int32, shape=[None, num_steps], name='outputPlaceholder')
+            pre_y_reshaped = self.y[:,100:130]      # only the last 30 steps count, corresponding to the language output time #
+            self.y_reshaped = tf.reshape(tf.transpose(pre_y_reshaped, [1,0]), [-1])
+
+            # actions target #
+            # num_sequences x num_timesteps x num_elements_actions.#
+            self.m_o = tf.placeholder(tf.float32, shape=[None, num_steps, motor_dim], name='outputPlaceholder')
+            pre_m_o_reshaped = self.m_o[:,30:130,:] # only the last 100 steps count, corresponding to the action output time #
+            self.m_o_reshaped = tf.reshape(tf.transpose(pre_m_o_reshaped, [1, 0, 2]), [-1, motor_dim])
+
+            # direction of information flow (True - sentences, False - actions)
+            self.direction = tf.placeholder(tf.bool, shape=())
 
 
-        # initialize graph with all cells and layers #
-        cells = []
-        for i in range(self.num_layers): 
-            num_unit = num_units[i]
-            tau = self.tau[i]
-            cells += [CTLSTMCell(num_unit, tau=tau, activation=self.activation)]
-        self.cell = MultiLayerHandler(cells) # First cell (index 0) is IO layer
-        
-
-        # main forward propagation loop, conditioned for direction of flow #
-        with tf.variable_scope("scan", reuse = tf.AUTO_REUSE):
-            self.rnn_outputs, self.final_states = tf.cond(self.direction,
-            lambda: tf.scan(lambda state, x: self.cell(x, state[1], reverse = True),
-            [tf.transpose(self.x, [1, 0, 2]), tf.transpose(self.m, [1,0,2])],
-            initializer=self.init_tuple), 
-            lambda: tf.scan(lambda state, x: self.cell(x, state[1], reverse = False), 
-            [tf.transpose(self.x, [1, 0, 2]), tf.transpose(self.m, [1,0,2])],
-            initializer=self.init_tuple))
-
-        
-        # processing the states #
-        state_state = []
-        for i in range(self.num_layers):
-            state_state += [(self.final_states[i][0][-1], self.final_states[i][1][-1])]
-        state_state = tuple(state_state)
-        self.state_tuple = (self.rnn_outputs[:][-1], state_state)
+            # initialize states/inputs #
+            init_input_lang = tf.placeholder(tf.float32, shape=[None, self.num_units[0]], name='initInputLang')
+            init_input_motor = tf.placeholder(tf.float32, shape=[None, self.num_units[6]], name = 'initInputMotor')
+            init_input = [init_input_motor, init_input_lang]
+            init_state = []
+            for i, num_unit in enumerate(self.num_units):
+                init_c = tf.placeholder(tf.float32, shape=[None, num_unit], name='initC_' + str(i))
+                init_u = tf.placeholder(tf.float32, shape=[None, num_unit], name='initU_' + str(i))
+                init_state += [(init_c, init_u)]
+            init_state = tuple(init_state)
+            self.init_tuple = (init_input, init_state)
 
 
-        # processing the outputs #
-        pre_rnn_outputs_lang = self.rnn_outputs[1]
-        rnn_outputs_lang = pre_rnn_outputs_lang[100:130, :, :]  # only last 30 steps count
-        rnn_outputs_lang = tf.cast(tf.reshape(rnn_outputs_lang, [-1, num_units[0]]), tf.float32)
-        rnn_outputs_lang = tf.slice(rnn_outputs_lang, [0, 0], [-1, lang_dim])
+            # initialize graph with all cells and layers #
+            cells = []
+            for i in range(self.num_layers): 
+                num_unit = num_units[i]
+                tau = self.tau[i]
+                cells += [CTLSTMCell(num_unit, tau=tau, activation=self.activation)]
+            self.cell = MultiLayerHandler(cells) # First cell (index 0) is IO layer
+            
 
-        
-        pre_rnn_outputs_motor = self.rnn_outputs[0]
-        rnn_outputs_motor = pre_rnn_outputs_motor[30:130, :, :] # only last 100 steps count
-        rnn_outputs_motor = tf.cast(tf.reshape(rnn_outputs_motor, [-1, num_units[6]]), tf.float32)
-        rnn_outputs_motor = tf.slice(rnn_outputs_motor, [0,0], [-1, motor_dim])
+            # main forward propagation loop, conditioned for direction of flow #
+            with tf.variable_scope("scan", reuse = tf.AUTO_REUSE):
+                self.rnn_outputs, self.final_states = tf.cond(self.direction,
+                lambda: tf.scan(lambda state, x: self.cell(x, state[1], reverse = True),
+                [tf.transpose(self.x, [1, 0, 2]), tf.transpose(self.m, [1,0,2])],
+                initializer=self.init_tuple), 
+                lambda: tf.scan(lambda state, x: self.cell(x, state[1], reverse = False), 
+                [tf.transpose(self.x, [1, 0, 2]), tf.transpose(self.m, [1,0,2])],
+                initializer=self.init_tuple))
 
-################################ Softmax #######################################
-        with tf.variable_scope('softmax'):
-            W = tf.get_variable('W', [lang_dim, lang_dim], tf.float32)
-            b = tf.get_variable('b', [lang_dim], initializer=tf.constant_initializer(0.0, tf.float32))
-            self.logits = tf.matmul(rnn_outputs_lang, W) + b
-            self.softmax = tf.nn.softmax(self.logits, dim=-1)
+            
+            # processing the states #
+            state_state = []
+            for i in range(self.num_layers):
+                state_state += [(self.final_states[i][0][-1], self.final_states[i][1][-1])]
+            state_state = tuple(state_state)
+            self.state_tuple = (self.rnn_outputs[:][-1], state_state)
 
 
-################################ Actions #######################################
+            # processing the outputs #
+            pre_rnn_outputs_lang = self.rnn_outputs[1]
+            rnn_outputs_lang = pre_rnn_outputs_lang[100:130, :, :]  # only last 30 steps count
+            rnn_outputs_lang = tf.cast(tf.reshape(rnn_outputs_lang, [-1, num_units[0]]), tf.float32)
+            rnn_outputs_lang = tf.slice(rnn_outputs_lang, [0, 0], [-1, lang_dim])
 
-        self.logits_motor = rnn_outputs_motor
-        
-############################# Loss function ####################################
+            
+            pre_rnn_outputs_motor = self.rnn_outputs[0]
+            rnn_outputs_motor = pre_rnn_outputs_motor[30:130, :, :] # only last 100 steps count
+            rnn_outputs_motor = tf.cast(tf.reshape(rnn_outputs_motor, [-1, num_units[6]]), tf.float32)
+            rnn_outputs_motor = tf.slice(rnn_outputs_motor, [0,0], [-1, motor_dim])
 
-        self.total_loss = tf.cond(self.direction, lambda: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.y_reshaped)), lambda: tf.reduce_sum(tf.square(tf.subtract(self.m_o_reshaped, self.logits_motor))))
-        tf.summary.scalar('training/total_loss', self.total_loss)
+    ################################ Softmax #######################################
+            with tf.variable_scope('softmax'):
+                W = tf.get_variable('W', [lang_dim, lang_dim], tf.float32)
+                b = tf.get_variable('b', [lang_dim], initializer=tf.constant_initializer(0.0, tf.float32))
+                self.logits = tf.matmul(rnn_outputs_lang, W) + b
+                self.softmax = tf.nn.softmax(self.logits, dim=-1)
 
-############################ Train operation ###################################
-        self.train_op = optimizers.AMSGrad(learning_rate).minimize(self.total_loss)
 
-################## If using gradient clipping, uncomment below #################
+    ################################ Actions #######################################
 
-        #optimizer = optimizers.AMSGrad(learning_rate)
-        #gradients, variables = zip(*optimizer.compute_gradients(self.total_loss))
-        #gradients, _ = tf.clip_by_global_norm(gradients, 7.0)
-        #self.train_op = optimizer.apply_gradients(zip(2*gradients, variables))
+            self.logits_motor = rnn_outputs_motor
+            
+    ############################# Loss function ####################################
 
-################################################################################
+            self.total_loss = tf.cond(self.direction, lambda: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.y_reshaped)), lambda: tf.reduce_sum(tf.square(tf.subtract(self.m_o_reshaped, self.logits_motor))))
+            #self.total_loss = tf.reduce_sum(tf.square(tf.subtract(self.m_o_reshaped, self.logits_motor)))
+            tf.summary.scalar('training/total_loss', self.total_loss)
 
-        self.TBsummaries = tf.summary.merge_all()
+    ############################ Train operation ###################################
+            self.train_op = optimizers.AMSGrad(learning_rate).minimize(self.total_loss)
 
-########## uncomment for GPU options (not worth it, more time-consuming) #######
+    ################## If using gradient clipping, uncomment below #################
 
-        #config = tf.ConfigProto(log_device_placement = False, allow_soft_placement=True)
-        #config.gpu_options.per_process_gpu_memory_fraction = 0.10
+            #optimizer = optimizers.AMSGrad(learning_rate)
+            #gradients, variables = zip(*optimizer.compute_gradients(self.total_loss))
+            #gradients, _ = tf.clip_by_global_norm(gradients, 7.0)
+            #self.train_op = optimizer.apply_gradients(zip(2*gradients, variables))
 
-################################################################################
+    ################################################################################
 
-        config = tf.ConfigProto(device_count = {'CPU': 12,'GPU': 0}, allow_soft_placement = True, log_device_placement = False)
-        config.gpu_options.per_process_gpu_memory_fraction = 0.3
-        config.operation_timeout_in_ms = 50000
+            self.TBsummaries = tf.summary.merge_all()
 
-        self.saver = tf.train.Saver(max_to_keep = 1)
-        self.sess = tf.Session(config = config)
+    ########## uncomment for GPU options (not worth it, more time-consuming) #######
+
+            #config = tf.ConfigProto(log_device_placement = False, allow_soft_placement=True)
+            #config.gpu_options.per_process_gpu_memory_fraction = 0.10
+
+    ################################################################################
+
+            #config = tf.ConfigProto(device_count = {'CPU': 12,'GPU': 1}, allow_soft_placement = True, log_device_placement = True)
+            #config.gpu_options.per_process_gpu_memory_fraction = 0.3
+            config = tf.ConfigProto(allow_soft_placement = True, log_device_placement = False)
+            config.gpu_options.per_process_gpu_memory_fraction = 0.49
+            config.operation_timeout_in_ms = 50000
+
+            self.saver = tf.train.Saver(max_to_keep = 100000)
+            self.sess = tf.Session(config = config)
 
 ################################################################################
 

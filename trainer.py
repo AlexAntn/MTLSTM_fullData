@@ -34,17 +34,17 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
 
     shuffled_seqs = np.arange(x_train.shape[0])
     np.random.shuffle(shuffled_seqs)
-    test_seqs = shuffled_seqs[0:batch_size]
-    train_seqs = shuffled_seqs[batch_size:]
+    test_seqs = shuffled_seqs[0:test_size]
+    train_seqs = shuffled_seqs[test_size:]
     
     ##################### process test batch first ####################   
-    x_train_b = np.zeros((batch_size, x_train.shape[1], x_train.shape[2]), dtype = np.float32)
-    y_train_b = np.zeros((batch_size, y_train.shape[1]), dtype = np.int32)
-    m_train_b = np.zeros((batch_size, m_train.shape[1], m_train.shape[2]), dtype = np.float32)
-    m_gener_b = np.zeros((batch_size, m_gener.shape[1], m_gener.shape[2]), dtype = np.float32)
-    m_output_b = np.zeros((batch_size, m_output.shape[1], m_output.shape[2]), dtype = np.float32)
+    x_train_b = np.zeros((test_size, x_train.shape[1], x_train.shape[2]), dtype = np.float32)
+    y_train_b = np.zeros((test_size, y_train.shape[1]), dtype = np.int32)
+    m_train_b = np.zeros((test_size, m_train.shape[1], m_train.shape[2]), dtype = np.float32)
+    m_gener_b = np.zeros((test_size, m_gener.shape[1], m_gener.shape[2]), dtype = np.float32)
+    m_output_b = np.zeros((test_size, m_output.shape[1], m_output.shape[2]), dtype = np.float32)
     seq = []
-    for i in range(batch_size):
+    for i in range(test_size):
         seq += [test_seqs[i]]
         x_train_b[i,:,:] = x_train[seq[-1], :, :]
         y_train_b[i,:] = y_train[seq[-1], :]
@@ -64,8 +64,9 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
     t = 0
     num_batches = 0
     seq = []
-    for i in range(x_train.shape[0]-batch_size):
+    for i in range(x_train.shape[0]-test_size):
         if i%batch_size == 0 and i != 0:
+            print(i)
             train_batch += [batch_struct(x_train_b, y_train_b, m_train_b, m_gener_b, m_output_b, seq)]
             t = 0
             seq = []
@@ -254,7 +255,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
     # Example Path: load_path = my_path + "/mtrnn_387111_loss_0.11538351478520781"
 
     USING_BATCH = True          # using batches or full dataset
-    batch_size = 32             # size of the batches (in number of sequences)
+    batch_size = 64             # size of the batches (in number of sequences)
 
     direction = True            # True - language to actions; False - actions to language
     alternate = True            # Alternate direction - False will train only one direction
@@ -370,7 +371,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
 
 
     ########### New functions to create and manipulate the batches ###############
-    test_size = 1 # number of batches on the test data
+    test_size = 32 # number of batches on the test data
 
     train_batch, test_batch, num_batches = create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batch_size, test_size)
 
@@ -394,15 +395,17 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
     #while (alternate and (lang_loss_list[-1] > threshold_lang or motor_loss_list[-1] > threshold_motor)) or (not alternate and ((direction and lang_loss_list[-1] > threshold_lang) or (not direction and motor_loss_list[-1] > threshold_motor))): 
     #    print("Training epoch " + str(epoch_idx))
 
+    updated = False
     while (alternate and (average_language_loss > threshold_lang or average_action_loss > threshold_motor)) or (not alternate and ((direction and average_language_loss > threshold_lang) or (not direction and average_action_loss > threshold_motor))): 
         print("Training epoch " + str(epoch_idx))
 
-        updated = False
+        #updated = False
         np.random.shuffle(batch_order) 
         batch_loss_list = np.zeros((num_batches), dtype = np.float32)
         average_action_loss_list = []
         average_language_loss_list = []
 
+        t0 = datetime.datetime.now()
         for batch_ in range(num_batches):
             # this check detects if the last batch was the small one, and fixes the state #
             if numSeqmod_b != batch_size:
@@ -509,6 +512,8 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
                 else:
                     break
             batch_loss_list[batch_] = alpha*lang_loss + (1-alpha)*motor_loss
+        t1 = datetime.datetime.now()
+        print("average time: ", (t1 -t0).total_seconds())
         average_action_loss = np.sum(average_action_loss_list)/num_batches
         motor_loss_list.append(average_action_loss)
         print("Average action error for epoch ", epoch_idx, ": ", average_action_loss)
@@ -532,7 +537,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
         epoch_idx += 1
         if epoch_idx > NEPOCH:
             break
-        if epoch_idx%100 == 0 or updated: 
+        if epoch_idx%100 == 0 or (updated and epoch_idx%10 == 0): 
             print("saving model......")
             model_path = my_path + "/mtlstm_model_"+str(best_model) + "_epoch_"+str(epoch_idx) + "_loss_" + str(average_loss)
             save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
@@ -543,6 +548,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
             with open('motor_loss', 'wb') as fp:
                 dump_list = motor_loss_list + [counter_motor]
                 pickle.dump(dump_list, fp)
+            updated = False
 
     print("the network trained language ", counter_lang, " times and motor actions ", counter_motor, " times.")
 
@@ -574,13 +580,13 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
 
     jumps = 201               # number of sequences jumped during the test. 1 tests every sequence
 
-    init_state_IO_l = np.zeros([batch_size, input_layer], dtype = np.float32)
-    init_state_fc_l = np.zeros([batch_size, lang_dim1], dtype = np.float32)
-    init_state_sc_l = np.zeros([batch_size, lang_dim2], dtype = np.float32)
-    init_state_ml = np.zeros([batch_size, meaning_dim], dtype = np.float32)
-    init_state_IO_m = np.zeros([batch_size, motor_layer], dtype = np.float32)
-    init_state_fc_m = np.zeros([batch_size, motor_dim1], dtype = np.float32)
-    init_state_sc_m = np.zeros([batch_size, motor_dim2], dtype = np.float32)
+    init_state_IO_l = np.zeros([test_size, input_layer], dtype = np.float32)
+    init_state_fc_l = np.zeros([test_size, lang_dim1], dtype = np.float32)
+    init_state_sc_l = np.zeros([test_size, lang_dim2], dtype = np.float32)
+    init_state_ml = np.zeros([test_size, meaning_dim], dtype = np.float32)
+    init_state_IO_m = np.zeros([test_size, motor_layer], dtype = np.float32)
+    init_state_fc_m = np.zeros([test_size, motor_dim1], dtype = np.float32)
+    init_state_sc_m = np.zeros([test_size, motor_dim2], dtype = np.float32)
 
     #MTLSTM.forward_step_test()   # function that initializes a smaller graph of the network, no training functions
     #tf.get_default_graph().finalize()
