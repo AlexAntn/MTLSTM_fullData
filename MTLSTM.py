@@ -241,7 +241,7 @@ class MTLSTMModel(object):
 
             #config = tf.ConfigProto(device_count = {'CPU': 12,'GPU': 1}, allow_soft_placement = True, log_device_placement = True)
             #config.gpu_options.per_process_gpu_memory_fraction = 0.3
-            config = tf.ConfigProto(allow_soft_placement = True, log_device_placement = False)
+            config = tf.ConfigProto(device_count = {'CPU': 12,'GPU': 0}, allow_soft_placement = True, log_device_placement = False)
             config.gpu_options.per_process_gpu_memory_fraction = 0.49
             config.operation_timeout_in_ms = 50000
 

@@ -255,7 +255,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
     # Example Path: load_path = my_path + "/mtrnn_387111_loss_0.11538351478520781"
 
     USING_BATCH = True          # using batches or full dataset
-    batch_size = 64             # size of the batches (in number of sequences)
+    batch_size = 32             # size of the batches (in number of sequences)
 
     direction = True            # True - language to actions; False - actions to language
     alternate = True            # Alternate direction - False will train only one direction
@@ -267,8 +267,8 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
     average_loss = 1.0          # initial value for the average loss (action+language) - arbitrary
 
     loss_list = []              # list that stores the average loss
-    lang_loss_list = [0.5]      # list that stores the language loss
-    lang_loss = 0.5             # Save model if language loss below this value
+    lang_loss_list = [2.0]      # list that stores the language loss
+    lang_loss = 2.0             # Save model if language loss below this value
     motor_loss_list = [1]       # list that stores the action loss
     motor_loss = 1              # Save model if action loss below this value
 
