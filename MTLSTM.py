@@ -29,7 +29,7 @@ class CTLSTMCell(tf.nn.rnn_cell.RNNCell):
 
     def __call__(self, inputs, state, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
-            old_u = state[1]    # previous cell state
+            old_u = state[0]    # previous cell state
 
             new_input = tf.concat(inputs, 1)    # all inputs to the cell, concatenated into a single tf tensor
 
@@ -41,7 +41,7 @@ class CTLSTMCell(tf.nn.rnn_cell.RNNCell):
 
             new_c = self.activation(new_u)  # calculate overall cell activation
 
-        return new_c, (new_c, new_u)
+        return new_c, (new_u, new_c)
 
 
 def shape_printer(obj, prefix):
@@ -72,9 +72,11 @@ class MultiLayerHandler():
                     cur_state = state[i]
                     if i == 0:                      # IO layre for language, last executed
                         cur_input = [inputs[0]] + [state[i+1][0]]
+                        print("input language", scope, cur_input)
                         outputs1, state_ = l(cur_input, cur_state, scope=scope)
                     elif i == self.num_layers - 1:  # IO layer for actions, first executed
                         cur_input = [inputs[1]] + [state[i-1][0]]
+                        print("input motor", scope, cur_input)
                         outputs2, state_ = l(cur_input, cur_state, scope=scope)
                     else:                           # Inbetween layers
                         cur_input = [state[i-1][0]] + [state[i+1][0]]
@@ -91,9 +93,11 @@ class MultiLayerHandler():
                     cur_state = state[i]
                     if i == 0:                      # IO layer for language, first executed
                         cur_input = [inputs[0]] + [state[i+1][0]]
+                        print("input language", scope, cur_input)
                         outputs1, state_ = l(cur_input, cur_state, scope=scope)
                     elif i == self.num_layers - 1:  # IO layer for actions, last executed
                         cur_input = [inputs[1]] + [state[i-1][0]]
+                        print("input motor", scope, cur_input)
                         outputs2, state_ = l(cur_input, cur_state, scope=scope)
                     else:                           # Inbetween layers
                         cur_input = [state[i-1][0]] + [state[i+1][0]]
@@ -104,6 +108,8 @@ class MultiLayerHandler():
 
             outputs = [outputs2, outputs1] # outputs of the network are only considered for the I/O layers
             shape_printer(out_state, 'MLH')
+            shape_printer(outputs, 'outputs')
+            shape_printer(inputs, 'inputs')
             return outputs, out_state
 
 
@@ -245,7 +251,7 @@ class MTLSTMModel(object):
             config.gpu_options.per_process_gpu_memory_fraction = 0.49
             config.operation_timeout_in_ms = 50000
 
-            self.saver = tf.train.Saver(max_to_keep = 100000)
+            self.saver = tf.train.Saver(max_to_keep = 1)
             self.sess = tf.Session(config = config)
 
 ################################################################################

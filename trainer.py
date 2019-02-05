@@ -19,12 +19,12 @@ import itertools
 
 class batch_struct():
     def __init__(self, x_train, y_train, m_train, m_gener, m_output, seq_num):
-        self.seq_num = seq_num
-        self.x_train = x_train
-        self.y_train = y_train
-        self.m_train = m_train
-        self.m_gener = m_gener
-        self.m_output = m_output
+        self.seq_num = np.copy(seq_num)
+        self.x_train = np.copy(x_train)
+        self.y_train = np.copy(y_train)
+        self.m_train = np.copy(m_train)
+        self.m_gener = np.copy(m_gener)
+        self.m_output = np.copy(m_output)
 
 ### for now, we consider only 1 batch for the test set, for testing. ########
 def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batch_size, test_size):
@@ -35,7 +35,9 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
     shuffled_seqs = np.arange(x_train.shape[0])
     np.random.shuffle(shuffled_seqs)
     test_seqs = shuffled_seqs[0:test_size]
+    #print("test sequences:", test_seqs)
     train_seqs = shuffled_seqs[test_size:]
+    #print("train sequences:", train_seqs)
     
     ##################### process test batch first ####################   
     x_train_b = np.zeros((test_size, x_train.shape[1], x_train.shape[2]), dtype = np.float32)
@@ -51,6 +53,7 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
         m_train_b[i,:,:] = m_train[seq[-1], :, :]
         m_gener_b[i,:,:] = m_gener[seq[-1], :, :]
         m_output_b[i,:,:] = m_output[seq[-1], :, :]
+    #print("test sequences:", seq)
     test_batch += [batch_struct(x_train_b, y_train_b, m_train_b, m_gener_b, m_output_b, seq)]
     ####################################################################
 
@@ -69,9 +72,12 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
             print(i)
             train_batch += [batch_struct(x_train_b, y_train_b, m_train_b, m_gener_b, m_output_b, seq)]
             t = 0
+            #print("train sequences:", seq)
             seq = []
             num_batches += 1
         seq += [train_seqs[i]]
+        print("actual seq:", train_seqs[i])
+        print("taken seq:", seq[-1])
         x_train_b[t,:,:] = x_train[seq[-1], :, :]
         y_train_b[t,:] = y_train[seq[-1], :]
         m_train_b[t,:,:] = m_train[seq[-1], :, :]
@@ -93,6 +99,7 @@ def create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batc
         m_output_b_t[:,:,:] = m_output_b[0:t, :, :]
         train_batch += [batch_struct(x_train_b_t, y_train_b_t, m_train_b_t, m_gener_b_t, m_output_b_t, seq)]
         num_batches += 1
+        print(i)
     
     return train_batch, test_batch, num_batches
 
@@ -245,7 +252,7 @@ def create_batch(x_train, y_train, m_train, m_gener, m_output, batch_size):
 my_path= os.getcwd()
 
 ########################################## Control Variables ################################
-for best_model in range(5): #we train 5 times, we check the best model in the end
+for best_model in range(3): #we train 5 times, we check the best model in the end
 
     tf.reset_default_graph()
 
@@ -261,7 +268,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
     alternate = True            # Alternate direction - False will train only one direction
     alpha = 0.5                 # 1 - language loss has more weight, 0 - action loss has more weight
 
-    NEPOCH = 80000            # number of times to train each batch
+    NEPOCH = 40000            # number of times to train each batch
     threshold_lang = 0.005      # early stopping language loss threshold
     threshold_motor = 0.1       # early stopping action loss threshold
     average_loss = 1.0          # initial value for the average loss (action+language) - arbitrary
@@ -371,7 +378,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
 
 
     ########### New functions to create and manipulate the batches ###############
-    test_size = 32 # number of batches on the test data
+    test_size = 16 # number of batches on the test data
 
     train_batch, test_batch, num_batches = create_train_test_batches(x_train, y_train, m_train, m_gener, m_output, batch_size, test_size)
 
@@ -388,7 +395,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
     Sequences = test_batch[0].seq_num
 
     seq_file = "test_seq_" + str(best_model) + ".txt"
-    with open(seq_file, 'a') as the_file:
+    with open(seq_file, 'w') as the_file:
         the_file.write(str(Sequences))
 
 
@@ -499,16 +506,16 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
                 # back to alternating training
                 if alternate:
                     direction = not direction
-                    if motor_loss_list[-1] < threshold_motor:
-                        direction = True
-                        if epoch_idx%10 == 0:
-                            direction = not direction
-                        break
-                    elif lang_loss_list[-1] < threshold_lang:
-                        direction = False
-                        if epoch_idx%10 == 0:
-                            direction = not direction
-                        break
+                    #if motor_loss_list[-1] < threshold_motor:
+                    #    direction = True
+                    #    if epoch_idx%10 == 0:
+                    #        direction = not direction
+                    #    break
+                    #elif lang_loss_list[-1] < threshold_lang:
+                    #    direction = False
+                    #    if epoch_idx%10 == 0:
+                    #        direction = not direction
+                    #    break
                 else:
                     break
             batch_loss_list[batch_] = alpha*lang_loss + (1-alpha)*motor_loss
@@ -535,9 +542,11 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
             #flag_save =True
 
         epoch_idx += 1
-        if epoch_idx > NEPOCH:
+        if epoch_idx > NEPOCH and average_loss < 0.8: #we want to force the k-fold tests, so can't end in the NEPOCH
             break
-        if epoch_idx%100 == 0 or (updated and epoch_idx%10 == 0): 
+        if epoch_idx > NEPOCH*3:    #force close at 3 times the nepochs (240K?)
+            exit()
+        if epoch_idx%400 == 0 or (updated and epoch_idx%10 == 0): 
             print("saving model......")
             model_path = my_path + "/mtlstm_model_"+str(best_model) + "_epoch_"+str(epoch_idx) + "_loss_" + str(average_loss)
             save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
@@ -549,6 +558,58 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
                 dump_list = motor_loss_list + [counter_motor]
                 pickle.dump(dump_list, fp)
             updated = False
+
+        if epoch_idx%10 == 0: #we test it
+            init_state_IO_l_b = np.zeros([1, input_layer], dtype = np.float32)
+            init_state_fc_l_b = np.zeros([1, lang_dim1], dtype = np.float32)
+            init_state_sc_l_b = np.zeros([1, lang_dim2], dtype = np.float32)
+            init_state_ml_b = np.zeros([1, meaning_dim], dtype = np.float32)
+            init_state_IO_m_b = np.zeros([1, motor_layer], dtype = np.float32)
+            init_state_fc_m_b = np.zeros([1, motor_dim1], dtype = np.float32)
+            init_state_sc_m_b = np.zeros([1, motor_dim2], dtype = np.float32)
+
+            new_lang_out = np.asarray(np.zeros((1, stepEachSeq)),dtype=np.int32)
+            new_motor_in = np.asarray(np.zeros((1, stepEachSeq, motor_input)),dtype=np.float32)
+            new_lang_in = np.asarray(np.zeros((1, stepEachSeq, lang_input)), dtype=np.float32)
+            new_motor_out = np.asarray(np.zeros((1, stepEachSeq, motor_input)), dtype=np.float32)
+
+
+            direction = True
+            new_motor_in[0, :, :] = train_batch[curr_batch].m_train[0, :, :]
+            softmax_list = np.zeros([Lang_stepEachSeq, lang_input], dtype = np.float32)
+
+            input_x = np.zeros([1, motor_input], dtype = np.float32)
+            input_sentence = np.zeros([1, lang_input], dtype = np.float32)
+
+            _total_loss, _state_tuple, softmax = MTLSTM.sess.run([MTLSTM.total_loss, MTLSTM.state_tuple, MTLSTM.softmax], feed_dict={MTLSTM.x:new_lang_in, MTLSTM.y:new_lang_out, MTLSTM.m:new_motor_in, MTLSTM.m_o:new_motor_out, MTLSTM.direction:direction, 'initU_0:0':init_state_IO_l_b, 'initC_0:0':init_state_IO_l_b, 'initU_1:0':init_state_fc_l_b, 'initC_1:0':init_state_fc_l_b, 'initU_2:0':init_state_sc_l_b, 'initC_2:0':init_state_sc_l_b, 'initU_3:0':init_state_ml_b, 'initC_3:0':init_state_ml_b, 'initU_4:0':init_state_sc_m_b, 'initC_4:0':init_state_sc_m_b, 'initU_5:0':init_state_fc_m_b, 'initC_5:0':init_state_fc_m_b, 'initU_6:0':init_state_IO_m_b, 'initC_6:0':init_state_IO_m_b})  
+
+            print("testing")
+            softmax_list = softmax
+
+            sentence = ""
+            for t in range(Lang_stepEachSeq):
+                for g in range(lang_input):
+                    if softmax_list[t,g] == max(softmax_list[t]): 
+                        if g <26:
+                            sentence += chr(97 + g)
+                        if g == 26:
+                            sentence += " "
+                        if g == 27:
+                            sentence += "."
+
+            print("output: ",sentence)
+            print("#######################################")
+            sentence = ""
+            for g in range(stepEachSeq):
+                if train_batch[curr_batch].y_train[0,g] == 26:
+                    sentence += " "
+                elif train_batch[curr_batch].y_train[0,g] == 27:
+                    sentence += "."
+                else:
+                    sentence += chr(97 + train_batch[curr_batch].y_train[0,g])
+
+            print("target: " ,sentence)
+            print("#######################################")
 
     print("the network trained language ", counter_lang, " times and motor actions ", counter_motor, " times.")
 
@@ -643,7 +704,7 @@ for best_model in range(5): #we train 5 times, we check the best model in the en
             counter_motor +=1
 
             # run the network with the data we prepared #
-            _total_loss, _train_op, _state_tuple = MTLSTM.sess.run([MTLSTM.total_loss, MTLSTM.train_op, MTLSTM.state_tuple], feed_dict={MTLSTM.x:lang_inputs, MTLSTM.y:y_train_b, MTLSTM.m:motor_inputs, MTLSTM.m_o:motor_outputs, MTLSTM.direction:direction, 'initU_0:0':init_state_IO_l, 'initC_0:0':init_state_IO_l, 'initU_1:0':init_state_fc_l, 'initC_1:0':init_state_fc_l, 'initU_2:0':init_state_sc_l, 'initC_2:0':init_state_sc_l, 'initU_3:0':init_state_ml, 'initC_3:0':init_state_ml, 'initU_4:0':init_state_sc_m, 'initC_4:0':init_state_sc_m, 'initU_5:0':init_state_fc_m, 'initC_5:0':init_state_fc_m, 'initU_6:0':init_state_IO_m, 'initC_6:0':init_state_IO_m})
+            _total_loss, _state_tuple = MTLSTM.sess.run([MTLSTM.total_loss, MTLSTM.state_tuple], feed_dict={MTLSTM.x:lang_inputs, MTLSTM.y:y_train_b, MTLSTM.m:motor_inputs, MTLSTM.m_o:motor_outputs, MTLSTM.direction:direction, 'initU_0:0':init_state_IO_l, 'initC_0:0':init_state_IO_l, 'initU_1:0':init_state_fc_l, 'initC_1:0':init_state_fc_l, 'initU_2:0':init_state_sc_l, 'initC_2:0':init_state_sc_l, 'initU_3:0':init_state_ml, 'initC_3:0':init_state_ml, 'initU_4:0':init_state_sc_m, 'initC_4:0':init_state_sc_m, 'initU_5:0':init_state_fc_m, 'initC_5:0':init_state_fc_m, 'initU_6:0':init_state_IO_m, 'initC_6:0':init_state_IO_m})
             if direction:       # if training language, save language loss
                 loss = _total_loss
                 print("training sentences: ", loss)

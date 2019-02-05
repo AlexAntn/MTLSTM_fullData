@@ -246,12 +246,12 @@ else:
     
 print("data loaded")
 
-test_false = True       # True to test action generation
-test_true = True       # True to test sentence generation
+test_false = False       # True to test action generation
+test_true = False       # True to test sentence generation
 PRINT_TABLE = False     # True to print language output matrix
 
 ############################### 
-save_path = my_path + "/mtlstm_model_0_epoch_23916_loss_0.12211811542510986"
+save_path = my_path + "/mtlstm_model_0_epoch_80000_loss_0.1542212046109713"
 ########################################## TEST ############################################
 
 MTRNN.saver.restore(MTRNN.sess, save_path)
@@ -294,25 +294,34 @@ euclid_dist_error = np.zeros([numSeq], dtype = np.float32)
 
 ################################################################################
 
-best_model = 0
+best_model = 1
 seq_file = "test_seq_"+ str(best_model) + ".txt"
 
 with open(seq_file, 'r') as the_file:
-    sequence_str = seq_file.read()
+    sequence_str = the_file.readline()
     sequence_str = sequence_str.replace('[', '').replace(']', '').split(", ")
 seq = []
 for i in range(len(sequence_str)):
     seq += [int(sequence_str[i])]
 
-MTRNN.forward_step_test()
+seq += [0] 
+seq += [3] 
+seq += [8] 
+seq += [21] 
+
+seq = [k for k in range(0, numSeq, 1)]
+
+#MTRNN.forward_step_test()
 tf.get_default_graph().finalize()
 
 old_verb = ""
 graph_counter = 0
 old_t = 0
+
 for i in range(0, numSeq, 1):
 
-    if i in seq:
+    raw_input("press enter to continue")
+    if i not in seq:
         continue
 
     print("sentence: ", sentence_list[i])
@@ -392,6 +401,60 @@ for i in range(0, numSeq, 1):
         old_t = new_t
 
     old_verb = verb
+
+#############################################
+
+    init_state_IO_l = np.zeros([1, input_layer], dtype = np.float32)
+    init_state_fc_l = np.zeros([1, lang_dim1], dtype = np.float32)
+    init_state_sc_l = np.zeros([1, lang_dim2], dtype = np.float32)
+    init_state_ml = np.zeros([1, meaning_dim], dtype = np.float32)
+    init_state_IO_m = np.zeros([1, motor_layer], dtype = np.float32)
+    init_state_fc_m = np.zeros([1, motor_dim1], dtype = np.float32)
+    init_state_sc_m = np.zeros([1, motor_dim2], dtype = np.float32)
+
+    new_lang_out = np.asarray(np.zeros((1, stepEachSeq)),dtype=np.int32)
+    new_motor_in = np.asarray(np.zeros((1, stepEachSeq, motor_input)),dtype=np.float32)
+    new_lang_in = np.asarray(np.zeros((1, stepEachSeq, lang_input)), dtype=np.float32)
+    new_motor_out = np.asarray(np.zeros((1, stepEachSeq, motor_input)), dtype=np.float32)
+
+    direction = True
+    new_motor_in[0, :, :] = m_train[i, :, :]
+    softmax_list = np.zeros([Lang_stepEachSeq, lang_input], dtype = np.float32)
+
+    input_x = np.zeros([1, motor_input], dtype = np.float32)
+    input_sentence = np.zeros([1, lang_input], dtype = np.float32)
+
+    _total_loss, _state_tuple, softmax = MTRNN.sess.run([MTRNN.total_loss, MTRNN.state_tuple, MTRNN.softmax], feed_dict={MTRNN.x:new_lang_in, MTRNN.y:new_lang_out, MTRNN.m:new_motor_in, MTRNN.m_o:new_motor_out, MTRNN.direction:direction, 'initU_0:0':init_state_IO_l, 'initC_0:0':init_state_IO_l, 'initU_1:0':init_state_fc_l, 'initC_1:0':init_state_fc_l, 'initU_2:0':init_state_sc_l, 'initC_2:0':init_state_sc_l, 'initU_3:0':init_state_ml, 'initC_3:0':init_state_ml, 'initU_4:0':init_state_sc_m, 'initC_4:0':init_state_sc_m, 'initU_5:0':init_state_fc_m, 'initC_5:0':init_state_fc_m, 'initU_6:0':init_state_IO_m, 'initC_6:0':init_state_IO_m})  
+
+    print("shape", np.shape(softmax))
+    softmax_list = softmax
+
+    sentence = ""
+    for t in range(Lang_stepEachSeq):
+        for g in range(lang_input):
+            if softmax_list[t,g] == max(softmax_list[t]): 
+                if g <26:
+                    sentence += chr(97 + g)
+                if g == 26:
+                    sentence += " "
+                if g == 27:
+                    sentence += "."
+
+    print("output: ",sentence)
+    print("#######################################")
+    sentence = ""
+    for g in range(stepEachSeq):
+        if y_train[i,g] == 26:
+            sentence += " "
+        elif y_train[i,g] == 27:
+            sentence += "."
+        else:
+            sentence += chr(97 + y_train[i,g])
+
+    print("target: " ,sentence)
+    print("#######################################")
+
+######################################################
 
     if test_true:
         new_lang_out = np.asarray(np.zeros((1, stepEachSeq)),dtype=np.int32)
