@@ -546,7 +546,8 @@ for best_model in range(3): #we train 5 times, we check the best model in the en
             break
         if epoch_idx > NEPOCH*3:    #force close at 3 times the nepochs (240K?)
             exit()
-        if epoch_idx%400 == 0 or (updated and epoch_idx%10 == 0): 
+        # we put the "updated" flag here since we only have 1 weight matrix being saved...
+        if (updated and epoch_idx%400 == 0) or (updated and epoch_idx%10 == 0): 
             print("saving model......")
             model_path = my_path + "/mtlstm_model_"+str(best_model) + "_epoch_"+str(epoch_idx) + "_loss_" + str(average_loss)
             save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
