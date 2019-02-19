@@ -252,7 +252,7 @@ def create_batch(x_train, y_train, m_train, m_gener, m_output, batch_size):
 my_path= os.getcwd()
 
 ########################################## Control Variables ################################
-for best_model in range(3): #we train 5 times, we check the best model in the end
+for best_model in range(1): #we train 5 times, we check the best model in the end
 
     tf.reset_default_graph()
 
@@ -387,22 +387,18 @@ for best_model in range(3): #we train 5 times, we check the best model in the en
 
     average_action_loss = 1000
     average_language_loss = 1000
-    #complicated logic:
-    # 1) we train actions and Lang, or;
-    # 2) we train only Lang, or;
-    # 3) we train only actions.
 
     Sequences = test_batch[0].seq_num
 
     seq_file = "test_seq_" + str(best_model) + ".txt"
     with open(seq_file, 'w') as the_file:
         the_file.write(str(Sequences))
-
-
-    #while (alternate and (lang_loss_list[-1] > threshold_lang or motor_loss_list[-1] > threshold_motor)) or (not alternate and ((direction and lang_loss_list[-1] > threshold_lang) or (not direction and motor_loss_list[-1] > threshold_motor))): 
-    #    print("Training epoch " + str(epoch_idx))
-
     updated = False
+
+    #complicated logic:
+    # 1) we train actions and Lang, or;
+    # 2) we train only Lang, or;
+    # 3) we train only actions.
     while (alternate and (average_language_loss > threshold_lang or average_action_loss > threshold_motor)) or (not alternate and ((direction and average_language_loss > threshold_lang) or (not direction and average_action_loss > threshold_motor))): 
         print("Training epoch " + str(epoch_idx))
 
@@ -540,13 +536,7 @@ for best_model in range(3): #we train 5 times, we check the best model in the en
             best_loss = average_loss
             updated = True
             #flag_save =True
-
-        epoch_idx += 1
-        if epoch_idx > NEPOCH and average_loss < 0.8: #we want to force the k-fold tests, so can't end in the NEPOCH
-            break
-        if epoch_idx > NEPOCH*3:    #force close at 3 times the nepochs (240K?)
-            exit()
-        if epoch_idx%400 == 0 or (updated and epoch_idx%10 == 0): 
+        if updated:
             print("saving model......")
             model_path = my_path + "/mtlstm_model_"+str(best_model) + "_epoch_"+str(epoch_idx) + "_loss_" + str(average_loss)
             save_path = MTLSTM.saver.save(MTLSTM.sess, model_path)
@@ -558,8 +548,11 @@ for best_model in range(3): #we train 5 times, we check the best model in the en
                 dump_list = motor_loss_list + [counter_motor]
                 pickle.dump(dump_list, fp)
             updated = False
+        epoch_idx += 1
+        if epoch_idx > NEPOCH:
+            break
 
-        if epoch_idx%10 == 0: #we test it
+        if epoch_idx%10 == 0 and (alternate or (not alternate and direction)): #we test it for language
             init_state_IO_l_b = np.zeros([1, input_layer], dtype = np.float32)
             init_state_fc_l_b = np.zeros([1, lang_dim1], dtype = np.float32)
             init_state_sc_l_b = np.zeros([1, lang_dim2], dtype = np.float32)
